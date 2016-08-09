@@ -40,7 +40,7 @@ HsbColor getHsb(int hue, int sat, int bri) {
   return HsbColor(H, S, B);
 }
 
-class PixelHandler : public LightHandler {
+class StripHandler : public LightHandler {
   private:
     HueLightInfo _info;
     int16_t colorloopIndex = -1;
@@ -70,7 +70,7 @@ class PixelHandler : public LightHandler {
             if (currentHue > 1) currentHue -= 1;
             HslColor updatedColor = HslColor(currentHue, newColor.S, newColor.L);
             RgbColor currentColor = updatedColor;
-            strip.SetPixelColor(lightNumber, updatedColor);
+            strip.ClearTo(updatedColor);
 
             // loop the animation until canceled
             if (param.state == AnimationState_Completed) {
@@ -84,7 +84,7 @@ class PixelHandler : public LightHandler {
         {
           // progress will start at 0.0 and end at 1.0
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, newColor, param.progress);
-          strip.SetPixelColor(lightNumber, updatedColor);
+          strip.ClearTo(updatedColor);
         };
         animator.StartAnimation(lightNumber, transitionTime, animUpdate);
       }
@@ -94,7 +94,7 @@ class PixelHandler : public LightHandler {
         {
           // progress will start at 0.0 and end at 1.0
           HslColor updatedColor = HslColor::LinearBlend<NeoHueBlendShortestDistance>(originalColor, black, param.progress);
-          strip.SetPixelColor(lightNumber, updatedColor);
+          strip.ClearTo(updatedColor);
         };
         animator.StartAnimation(lightNumber, transitionTime, animUpdate);
       }
@@ -158,9 +158,7 @@ void setup() {
   LightService.begin();
 
   // setup pixels as lights
-  for (int i = 0; i < MAX_LIGHT_HANDLERS && i < pixelCount; i++) {
-    LightService.setLightHandler(i, new PixelHandler());
-  }
+  LightService.setLightHandler(0, new StripHandler());
 }
 
 void loop() {
