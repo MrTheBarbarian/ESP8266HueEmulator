@@ -64,13 +64,15 @@ class StripHandler : public LightHandler {
           animator.StartAnimation(lightNumber, SIXTY_SECONDS, [ = ](const AnimationParam & param) {
             // save off animation index
             colorloopIndex = param.index;
-
-            // progress will start at 0.0 and end at 1.0
-            float currentHue = newColor.H + param.progress;
-            if (currentHue > 1) currentHue -= 1;
-            HslColor updatedColor = HslColor(currentHue, newColor.S, newColor.L);
-            RgbColor currentColor = updatedColor;
-            strip.ClearTo(updatedColor);
+            for (int i = 0; i < pixelCount; i++) {
+              float offset = i * 1.0f/pixelCount;
+              // progress will start at 0.0 and end at 1.0
+              float currentHue = newColor.H + param.progress + offset;
+              if (currentHue > 1) currentHue -= 1;
+              HslColor updatedColor = HslColor(currentHue, newColor.S, newColor.L);
+              RgbColor currentColor = updatedColor;
+              strip.SetPixelColor(i, updatedColor);
+            }
 
             // loop the animation until canceled
             if (param.state == AnimationState_Completed) {
