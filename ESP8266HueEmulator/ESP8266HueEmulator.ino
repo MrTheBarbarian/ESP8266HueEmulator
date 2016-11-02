@@ -58,6 +58,7 @@ class StripHandler : public LightHandler {
       }
       if (newInfo.on)
       {
+        aJsonObject* pattern = aJson.getObjectItem(raw, "pattern");
         if (_info.effect == EFFECT_COLORLOOP) {
           //color loop at max brightness/saturation on a 60 second cycle
           const int SIXTY_SECONDS = 60000;
@@ -80,6 +81,26 @@ class StripHandler : public LightHandler {
               animator.RestartAnimation(param.index);
             }
           });
+          return;
+        } else if (pattern) {
+          // pattern is an array of color settings objects
+          // apply to first pattern_len lights
+          int pattern_len = aJson.getArraySize(pattern);
+          for (int i = 0; i < pattern_len && i < pixelCount; i++) {
+            aJsonObject* elem = aJson.getArrayItem(pattern, i);
+            HueLightInfo elemInfo;
+            parseHueLightInfo(newInfo, elem, &elemInfo);
+            int num_patterns = ((pixelCount - i - 1) / pattern_len) + 1;
+            int brightness = elemInfo.brightness;
+            if (!elemInfo.on) {
+              brightness = 0;
+            }
+            for (int n = 0; n < num_patterns; n++) {
+              int light_index = n * pattern_len + i;
+              // no fade for patterns
+              strip.SetPixelColor(light_index, HslColor(getHsb(elemInfo.hue, elemInfo.saturation, brightness)));
+            }
+          }
           return;
         }
         AnimUpdateCallback animUpdate = [ = ](const AnimationParam & param)
