@@ -181,6 +181,7 @@ void setup() {
   LightService.begin();
 
   // setup pixels as lights
+  LightService.setLightsAvailable(1);
   LightService.setLightHandler(0, new StripHandler());
 }
 
