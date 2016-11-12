@@ -130,6 +130,7 @@ void setup() {
 
   // this resets all the neopixels to an off state
   strip.Begin();
+  strip.ClearTo(HslColor(getHsb(5485, 227, 254)));
   strip.Show();
 
   // Show that the NeoPixels are alive
@@ -138,12 +139,13 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  infoLight(white);
 
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("WiFi Failed");
     // Show that we are connected
     infoLight(red);
+    strip.ClearTo(HslColor(getHsb(5485, 227, 100)));
+    strip.Show();
     while (1) delay(100);
   }
   
@@ -201,12 +203,10 @@ void loop() {
 
 void infoLight(RgbColor color) {
   // Flash the strip in the selected color. White = booted, green = WLAN connected, red = WLAN could not connect
-  for (int i = 0; i < pixelCount; i++)
-  {
-    strip.SetPixelColor(i, color);
-    strip.Show();
-    delay(10);
-    strip.SetPixelColor(i, black);
-    strip.Show();
-  }
+  HslColor originalColor = strip.GetPixelColor(0);
+  strip.ClearTo(color);
+  strip.Show();
+  delay(500);
+  strip.ClearTo(originalColor);
+  strip.Show();
 }
