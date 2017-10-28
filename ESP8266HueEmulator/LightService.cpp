@@ -309,10 +309,11 @@ static const char* _ssdp_xml_template = "<?xml version=\"1.0\" ?>"
   "</root>";
 
 int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
-                          bool isNotify, int interval, char *modelName,
+                          ssdp_method_t method, int interval, char *modelName,
                           char *modelNumber, char *uuid, char *deviceType,
                           uint32_t ip, uint16_t port, char *schemaURL) {
-  if (isNotify) {
+  switch (method) {
+  case NOTIFY:
     return snprintf(buffer, buff_len,
       _ssdp_notify_template,
       interval,
@@ -321,7 +322,7 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
       bridgeIDString.c_str(),
       deviceType,
       uuid);
-  } else {
+  case NONE:
     return snprintf(buffer, buff_len,
       _ssdp_response_template,
       interval,

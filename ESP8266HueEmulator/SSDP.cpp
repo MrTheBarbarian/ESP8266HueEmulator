@@ -208,7 +208,7 @@ void SSDPClass::_send(ssdp_method_t method){
 
   int len;
   if (_messageFormatCallback) {
-    len = _messageFormatCallback(this, buffer, sizeof(buffer), method != NONE, SSDP_INTERVAL, _modelName, _modelNumber, _uuid, _deviceType, ip, _port, _schemaURL);
+    len = _messageFormatCallback(this, buffer, sizeof(buffer), method, SSDP_INTERVAL, _modelName, _modelNumber, _uuid, _deviceType, ip, _port, _schemaURL);
   } else {
     len = snprintf(buffer, sizeof(buffer),
       _ssdp_packet_template,

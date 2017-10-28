@@ -63,7 +63,7 @@ class SSDPClass{
 
     bool begin();
     typedef std::function<int(SSDPClass *ssdp, char *buffer, int buff_len,
-                                               bool isNotify, int interval, char *modelName,
+                                               ssdp_method_t method, int interval, char *modelName,
                                                char *modelNumber, char *uuid, char *deviceType,
                                                uint32_t ip, uint16_t port, char *schemaURL)> MsgFormatFunction;
     void setMessageFormatCallback(MsgFormatFunction callback) { _messageFormatCallback = callback; }
