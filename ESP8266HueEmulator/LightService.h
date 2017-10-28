@@ -42,6 +42,9 @@ class LightHandler {
     virtual String getFriendlyName(int lightNumber) const {
       return "Hue LightStrips " + ((String) (lightNumber + 1));
     }
+    virtual String getId(int lightNumber) {
+      return String(lightNumber);
+    }
 };
 
 // Max number of exposed lights is directly related to aJSON PRINT_BUFFER_LEN, 14 for 4096
@@ -54,6 +57,7 @@ class LightServiceClass {
 
     public:
       LightServiceClass();
+      int getLightIndex(String lightId);
       LightHandler *getLightHandler(int numberOfTheLight);
       bool setLightsAvailable(int numLights);
       int getLightsAvailable();

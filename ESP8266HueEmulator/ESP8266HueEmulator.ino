@@ -112,6 +112,12 @@ class PixelHandler : public LightHandler {
     }
 
     HueLightInfo getInfo(int lightNumber) { return _info; }
+    String getId(int lightNumber) {
+      // get sanitized MAC
+      String mac = WiFi.macAddress();
+      mac.replace(':', '.');
+      return mac+"-"+String(lightNumber);
+    }
 };
 
 void setup() {

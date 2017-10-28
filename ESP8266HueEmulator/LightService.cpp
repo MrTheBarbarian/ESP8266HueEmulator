@@ -237,6 +237,19 @@ LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
   return lightHandlers[numberOfTheLight];
 }
 
+int LightServiceClass::getLightIndex(String lightId) {
+  for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
+    if (lightHandlers[i]) {
+      String id = lightHandlers[i]->getId(i+1);
+      if (id == lightId) {
+        return i;
+      }
+    }
+  }
+
+  return -1;
+}
+
 static const char* _ssdp_response_template =
   "HTTP/1.1 200 OK\r\n"
   "EXT:\r\n"
@@ -330,7 +343,7 @@ class LightGroup {
       for (int i = 0; i < aJson.getArraySize(jLights); i++) {
         aJsonObject* jLight = aJson.getArrayItem(jLights, i);
         // lights are 1-based and map to the 0-based bitfield
-        int lightNum = atoi(jLight->valuestring);
+        int lightNum = LightService.getLightIndex(jLight->valuestring);
         if (lightNum != 0) {
           lights |= (1 << (lightNum - 1));
         }
@@ -822,7 +835,7 @@ void lightsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method)
 
 void addSingleLightJson(aJsonObject* , int , LightHandler *);
 void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
-  int numberOfTheLight = atoi(whandler->getWildCard(1).c_str()) - 1;
+  int numberOfTheLight = LightService.getLightIndex(whandler->getWildCard(1).c_str());
   LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
   switch (method) {
     case HTTP_GET: {
@@ -843,7 +856,7 @@ void lightsIdFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod meth
 }
 
 void lightsIdStateFn(WcFnRequestHandler *whandler, String requestUri, HTTPMethod method) {
-  int numberOfTheLight = max(0, atoi(whandler->getWildCard(1).c_str()) - 1);
+  int numberOfTheLight = LightService.getLightIndex(whandler->getWildCard(1).c_str());
   LightHandler *handler = LightService.getLightHandler(numberOfTheLight);
   if (!handler) {
     char buff[100] = {};
@@ -1265,15 +1278,17 @@ bool parseHueLightInfo(HueLightInfo currentInfo, aJsonObject *parsedRoot, HueLig
 
 void addSingleLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *lightHandler) {
   if (!lightHandler) return;
-  String lightNumber = (String) (numberOfTheLight + 1);
+  String lightNumber = lightHandler->getId(numberOfTheLight + 1);
   String lightName = lightHandler->getFriendlyName(numberOfTheLight);
   
   aJson.addStringToObject(root, "manufacturername", "OpenSource"); // type of lamp (all "Extended colour light" for now)
   aJson.addStringToObject(root, "modelid", "LST001"); // the model number
   aJson.addStringToObject(root, "name",  lightName.c_str()); // // the name as set through the web UI or app
+  aJsonObject *light;
+  aJson.addItemToObject(root, lightName.c_str(), light = aJson.createObject());
   aJsonObject *state;
   aJson.addItemToObject(root, "state", state = aJson.createObject());
-  HueLightInfo info = lightHandler->getInfo(numberOfTheLight);
+  HueLightInfo info = lightHandler->getInfo(numberOfTheLight + 1);
   aJson.addBooleanToObject(state, "on", info.on);
   aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
   aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
