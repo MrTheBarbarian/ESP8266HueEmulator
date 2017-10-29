@@ -191,9 +191,8 @@ protected:
     char _wildcard;
 };
 
-LightHandler *lightHandlers[MAX_LIGHT_HANDLERS] = {}; // interfaces exposed to the outside world
-
 LightServiceClass::LightServiceClass() { }
+LightHandler *lightHandlers[MAX_LIGHT_HANDLERS] = {0,}; // interfaces exposed to the outside world
 
 bool LightServiceClass::setLightHandler(int index, LightHandler *handler) {
   if (index >= currentNumLights || index < 0) return false;
