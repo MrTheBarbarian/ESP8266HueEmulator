@@ -47,8 +47,6 @@ class LightHandler {
     }
 };
 
-// Max number of exposed lights is directly related to aJSON PRINT_BUFFER_LEN, 14 for 4096
-#define MAX_LIGHT_HANDLERS 2
 #define COLOR_SATURATION 255.0f
 
 class ESP8266WebServer;
@@ -63,11 +61,11 @@ class LightServiceClass {
       int getLightsAvailable();
       bool setLightHandler(int index, LightHandler *handler);
       void setBufferlessResponses(bool enabled);
+      int addLightHandler(LightHandler *handler);
       void begin();
       void begin(ESP8266WebServer *svr);
       void update();
     private:
-      int currentNumLights = MAX_LIGHT_HANDLERS;
 };
 
 extern LightServiceClass LightService;

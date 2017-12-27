@@ -11,6 +11,7 @@
 #include <NtpClientLib.h>
 #include <NeoPixelBus.h>
 #include <NeoPixelAnimator.h> // instead of NeoPixelAnimator branch
+#include <QList.h>
 #include "LightService.h"
 
 // these are only used in LightHandler.cpp, but it seems that the IDE only scans the .ino and real libraries for dependencies
@@ -32,9 +33,9 @@ RgbColor black = RgbColor(0);
 
 #define pixelCount 30
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
-NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
-NeoPixelAnimator animator(MAX_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, NEO_MILLISECONDS); // NeoPixel animation management object
-LightServiceClass LightService;
+#define NUM_LIGHT_HANDLERS 6
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(NUM_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
+NeoPixelAnimator animator(NUM_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, NEO_MILLISECONDS); // NeoPixel animation management object
 
 HsbColor getHsb(int hue, int sat, int bri) {
   float H, S, B;
@@ -181,9 +182,9 @@ void setup() {
   LightService.begin();
   //LightService.setBufferlessResponses(true);
 
-  // setup pixels as lights
-  for (int i = 0; i < MAX_LIGHT_HANDLERS && i < pixelCount; i++) {
-    LightService.setLightHandler(i, new PixelHandler());
+  // setup NUM_LIGHT_HANDLERS pixels as lights
+  for (int i = 0; i < NUM_LIGHT_HANDLERS && i < pixelCount; i++) {
+    LightService.addLightHandler(new PixelHandler());
   }
 
   // We'll get the time eventually ...

@@ -8,6 +8,8 @@
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 #include <assert.h>
 #include <FS.h>
+#include <QList.h>
+#include "QList.cpp"
 
 String macString;
 String bridgeIDString;
@@ -192,25 +194,42 @@ protected:
 };
 
 LightServiceClass::LightServiceClass() { }
-LightHandler *lightHandlers[MAX_LIGHT_HANDLERS] = {0,}; // interfaces exposed to the outside world
+LightServiceClass LightService;
+
+QList<LightHandler*> local_lights; // interfaces exposed to the outside world
+LightHandler *global_lights_get(int index) {
+  if (index < local_lights.length()) {
+    return local_lights[index];
+  }
+  return nullptr;
+}
+
+int global_lights_total() {
+  return local_lights.length();
+}
 
 bool LightServiceClass::setLightHandler(int index, LightHandler *handler) {
-  if (index >= currentNumLights || index < 0) return false;
-  lightHandlers[index] = handler;
+  if (index < local_lights.length() - 1) setLightsAvailable(index + 1);
+  local_lights[index] = handler;
   return true;
 }
 
+int LightServiceClass::addLightHandler(LightHandler *handler) {
+  local_lights.push_back(handler);
+  return local_lights.length() - 1;
+}
 
 bool LightServiceClass::setLightsAvailable(int lights) {
-  if (lights <= MAX_LIGHT_HANDLERS) {
-    currentNumLights = lights;
-    return true;
+  // push out to lights-1
+  if (lights <= local_lights.length()) return true;
+  for (int i = lights - local_lights.length(); i > 0; i--) {
+    local_lights.push_back(nullptr);
   }
-  return false;
+  return true;
 }
 
 int LightServiceClass::getLightsAvailable() {
-  return currentNumLights;
+  return local_lights.length();
 }
 
 String StringIPaddress(IPAddress myaddr)
@@ -225,21 +244,21 @@ String StringIPaddress(IPAddress myaddr)
 }
 
 LightHandler *LightServiceClass::getLightHandler(int numberOfTheLight) {
-  if (numberOfTheLight >= currentNumLights || numberOfTheLight < 0) {
+  if (numberOfTheLight >= global_lights_total() || numberOfTheLight < 0) {
     return nullptr;
   }
 
-  if (!lightHandlers[numberOfTheLight]) {
+  if (!global_lights_get(numberOfTheLight)) {
     return new LightHandler();
   }
 
-  return lightHandlers[numberOfTheLight];
+  return global_lights_get(numberOfTheLight);
 }
 
 int LightServiceClass::getLightIndex(String lightId) {
-  for (int i = 0; i < MAX_LIGHT_HANDLERS; i++) {
-    if (lightHandlers[i]) {
-      String id = lightHandlers[i]->getId(i+1);
+  for (int i = 0; i < global_lights_total(); i++) {
+    if (global_lights_get(i)) {
+      String id = global_lights_get(i)->getId(i + 1);
       if (id == lightId) {
         return i;
       }
@@ -760,8 +779,8 @@ void groupsIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
         aJson.addStringToObject(object, "name", "0");
         aJsonObject *lightsArray = aJson.createArray();
         aJson.addItemToObject(object, "lights", lightsArray);
-        for (int i = 0; i < LightService.getLightsAvailable(); i++) {
-          if (!lightHandlers[i]) {
+        for (int i = 0; i < global_lights_total(); i++) {
+          if (!global_lights_get(i)) {
             continue;
           }
           // add light to list
