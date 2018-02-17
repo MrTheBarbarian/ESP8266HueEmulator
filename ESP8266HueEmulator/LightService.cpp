@@ -358,15 +358,14 @@ class LightGroup {
       type = "Room";
 
       aJsonObject* jName = aJson.getObjectItem(root, "name");
-      aJsonObject* jLights = aJson.getObjectItem(root, "lights");
-      // jName and jLights guaranteed to exist
+      // jName guaranteed to exist
       name = jName->valuestring;
-      for (int i = 0; i < aJson.getArraySize(jLights); i++) {
-        aJsonObject* jLight = aJson.getArrayItem(jLights, i);
-        // lights are 1-based and map to the 0-based bitfield
-        int lightNum = LightService.getLightIndex(jLight->valuestring);
-        if (lightNum != 0) {
-          lights |= (1 << (lightNum - 1));
+
+      aJsonObject* jLights = aJson.getObjectItem(root, "lights");
+      if (jLights) {
+        for (int i = 0; i < aJson.getArraySize(jLights); i++) {
+          aJsonObject* jLight = aJson.getArrayItem(jLights, i);
+          lights.push_back(jLight->valuestring);
         }
       }
 
@@ -378,21 +377,18 @@ class LightGroup {
     aJsonObject *getJson() {
       aJsonObject *object = aJson.createObject();
       aJson.addStringToObject(object, "name", name.c_str());
-      aJsonObject *lightsArray = aJson.createArray();
       aJsonObject *lightsState = aJson.createObject();
       aJson.addStringToObject(lightsState, "all_on", "true");
       aJson.addStringToObject(lightsState, "any_on", "true");
       aJson.addItemToObject(object, "state", lightsState);
       
-      aJson.addItemToObject(object, "lights", lightsArray);
-      for (int i = 0; i < 16; i++) {
-        if (!((1 << i) & lights)) {
-          continue;
+      if (lights.size()) {
+        aJsonObject *lightsArray = aJson.createArray();
+        aJson.addItemToObject(object, "lights", lightsArray);
+        for (int i = 0; i < lights.size(); i++) {
+          // add light to list
+          aJson.addItemToArray(lightsArray, aJson.createItem(lights[i].c_str()));
         }
-        // add light to list
-        String lightNum = "";
-        lightNum += (i + 1);
-        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
       }
       aJson.addStringToObject(object, "type", "LightGroup");   
       return object;
@@ -401,19 +397,16 @@ class LightGroup {
 
     aJsonObject *getSceneJson(bool withStates) {
       aJsonObject *object = aJson.createObject();
-      aJson.addStringToObject(object, "name", name.c_str());
-      aJsonObject *lightsArray = aJson.createArray();
-      aJson.addItemToObject(object, "lights", lightsArray);
-      for (int i = 0; i < 16; i++) {
-        if (!((1 << i) & lights)) {
-          continue;
+      if (lights.size()) {
+        aJsonObject *lightsArray = aJson.createArray();
+        aJson.addItemToObject(object, "lights", lightsArray);
+        for (int i = 0; i < lights.size(); i++) {
+          // add light to list
+          aJson.addItemToArray(lightsArray, aJson.createItem(lights[i].c_str()));
         }
-        // add light to list
-        String lightNum = "";
-        lightNum += (i + 1);
-        aJson.addItemToArray(lightsArray, aJson.createItem(lightNum.c_str()));
       }
             
+      aJson.addStringToObject(object, "name", name.c_str());
       aJson.addStringToObject(object, "owner", "api");
       aJson.addBooleanToObject(object, "recycle", false);
       aJson.addBooleanToObject(object, "locked", false);
@@ -460,7 +453,7 @@ class LightGroup {
       free(json);
       return object;
     }
-    unsigned int getLightMask() {
+    QList<String> getLightList() {
       return lights;
     }
     // only used for scenes
@@ -471,9 +464,7 @@ class LightGroup {
     }
   private:
     String name, type;
-    // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
-    unsigned int lights = 0;
-    // no need to hold the group type, only LightGroup is supported for API 1.4
+    QList<String> lights;
 };
 
 void on(HandlerFunction fn, const String &wcUri, HTTPMethod method, char wildcard = '*') {
@@ -813,7 +804,7 @@ void groupsIdFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod metho
   }
 }
 
-void applyConfigToLightMask(unsigned int lights);
+void applyConfigToLightList();
 void groupsIdActionFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
   if (method != HTTP_PUT) {
     // error, only PUT allowed
@@ -828,16 +819,8 @@ void groupsIdActionFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod
     sendError(3, requestUri, "Invalid group number");
     return;
   }
-  // parse input as if for all lights
-  unsigned int lightMask;
-  if (groupNum == -1) {
-    lightMask == 0xFFFF;
-  } else {
-    
-    lightMask = lightGroups[groupNum]->getLightMask();
-  }
   // apply to group
-  applyConfigToLightMask(lightMask);
+  applyConfigToLightList();
 }
 
 void lightsFn(WcFnRequestHandler *handler, String requestUri, HTTPMethod method) {
@@ -1449,15 +1432,14 @@ String trimSlash(String uri) {
 aJsonObject *validateGroupCreateBody(String body) {
   aJsonObject *root = aJson.parse(( char*) body.c_str());
   aJsonObject* jName = aJson.getObjectItem(root, "name");
-  aJsonObject* jLights = aJson.getObjectItem(root, "lights");
-  if (!jName || !jLights) {
+  if (!jName) {
     return nullptr;
   }
   return root;
 }
 
-void applyConfigToLightMask(unsigned int lights) {
-  Serial.print("applyConfigToLightMask:");
+void applyConfigToLightList() {
+  Serial.print("applyConfigToLightList:");
   Serial.println(HTTP->arg("plain"));
   aJsonObject* parsedRoot = aJson.parse(( char*) HTTP->arg("plain").c_str());
   if (parsedRoot) {
