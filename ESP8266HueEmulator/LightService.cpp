@@ -355,6 +355,8 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
 class LightGroup {
   public:
     LightGroup(aJsonObject *root) {
+      type = "Room";
+
       aJsonObject* jName = aJson.getObjectItem(root, "name");
       aJsonObject* jLights = aJson.getObjectItem(root, "lights");
       // jName and jLights guaranteed to exist
@@ -366,6 +368,11 @@ class LightGroup {
         if (lightNum != 0) {
           lights |= (1 << (lightNum - 1));
         }
+      }
+
+      aJsonObject* jType = aJson.getObjectItem(root, "type");
+      if (jType) {
+        type = jType->valuestring;
       }
     }
     aJsonObject *getJson() {
@@ -463,7 +470,7 @@ class LightGroup {
       return name;  
     }
   private:
-    String name;
+    String name, type;
     // use unsigned int to hold members of this group. 2 bytes -> supports up to 16 lights
     unsigned int lights = 0;
     // no need to hold the group type, only LightGroup is supported for API 1.4
