@@ -8,6 +8,7 @@
 #include <aJSON.h> // Replace avm/pgmspace.h with pgmspace.h there and set #define PRINT_BUFFER_LEN 4096 ################# IMPORTANT
 #include <assert.h>
 #include <FS.h>
+#include <ESP8266HTTPClient.h>
 #include <QList.h>
 #include "QList.cpp"
 
@@ -26,6 +27,65 @@ String SCENE_FILE_TEMPLATE = "SCENE-%d.json";
 
 
 ESP8266WebServer *HTTP;
+
+class ProxyHandler : public LightHandler {
+  private:
+    String _target = "";
+    String _id = "";
+    String _localId = "";
+    HueLightInfo _info;
+  public:
+    ProxyHandler(String &target, String mac, aJsonObject* entry) : _target(target), _id(entry->name) {
+      mac.replace(':', '.');
+      if (!_id.startsWith(mac)) {
+        _localId.concat(mac);
+        _localId.concat("-");
+        _localId.concat(_id);
+      }
+      _info.local = false;
+      aJsonObject* state = aJson.getObjectItem(entry, "state");
+      for (int i = 0; i < aJson.getArraySize(state); i++) {
+        aJsonObject *entry = aJson.getArrayItem(state, i);
+        if (entry->name == "on" && entry->type == aJson_Boolean) {
+          _info.on = entry->valuebool;
+        } else if (entry->name == "bri" && entry->type == aJson_Int) {
+          _info.brightness = entry->valueint;
+        } else if (entry->name == "hue" && entry->type == aJson_Int) {
+          _info.hue = entry->valueint;
+        } else if (entry->name == "sat" && entry->type == aJson_Int) {
+          _info.saturation = entry->valueint;
+        } else if (entry->name == "alert" && entry->type == aJson_String) {
+          _info.alert = entry->valuestring;
+        } else if (entry->name == "effect" && entry->type == aJson_String) {
+          _info.effect = entry->valuestring;
+        }
+      }
+    }
+    void handleQuery(int lightNumber, HueLightInfo newInfo, aJsonObject* raw) {
+      HTTPClient http;
+      bool begin_ret = http.begin(_target + "/api/api/lights/" + _id + "/state");
+      char *msgstr = aJson.print(raw);
+      String msg_str = msgstr;
+      int responseCode = http.sendRequest("PUT", msg_str);
+      free(msgstr);
+      if (responseCode != 200) {
+        Serial.println("Got bad response to remote light PUT");
+      }
+      http.end();
+    }
+
+    HueLightInfo getInfo(int lightNumber) {
+      return _info;
+    }
+
+    String getId(int lightNumber) {
+      if (_localId.length()) {
+        return _localId;
+      }
+      return _id;
+    }
+};
+QList<ProxyHandler*> foreign_lights;
 
 struct rgbcolor {
   rgbcolor(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b) {};
@@ -201,11 +261,15 @@ LightHandler *global_lights_get(int index) {
   if (index < local_lights.length()) {
     return local_lights[index];
   }
+  index -= local_lights.length();
+  if (index < foreign_lights.length()) {
+    return foreign_lights[index];
+  }
   return nullptr;
 }
 
 int global_lights_total() {
-  return local_lights.length();
+  return local_lights.length() + foreign_lights.length();
 }
 
 bool LightServiceClass::setLightHandler(int index, LightHandler *handler) {
@@ -326,6 +390,14 @@ static const char* _ssdp_xml_template = "<?xml version=\"1.0\" ?>"
   "</device>"
   "</root>";
 
+static const char* _ssdp_search_template =
+  "M-SEARCH * HTTP/1.1\r\n"
+  "ST: ssdp:all\r\n"
+  "MX: 3\r\n"
+  "MAN: ssdp:discover\r\n"
+  "HOST: 239.255.255.250:1900\r\n"
+  "\r\n";
+
 int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
                           ssdp_method_t method, int interval, char *modelName,
                           char *modelNumber, char *uuid, char *deviceType,
@@ -349,7 +421,57 @@ int ssdpMsgFormatCallback(SSDPClass *ssdp, char *buffer, int buff_len,
       bridgeIDString.c_str(),
       deviceType,
       uuid);
+  case SEARCH:
+    return snprintf(buffer, buff_len, _ssdp_search_template);
   }
+}
+
+QList<String> bridge_description_addresses;
+void LightServiceClass::notifyCallback(SSDPClass *ssdp, IPAddress addr, uint16_t port) {
+  String key, value, ext;
+  bool def_hue = false;
+  while (ssdp->readIncomingLine(&key, &value) > 0) {
+    if (key == "LOCATION") {
+      ext = value;
+    }
+    if (key == "hue-bridgeid") {
+      def_hue = true;
+    }
+  }
+  if (!def_hue) {
+    return;
+  }
+  bridge_description_addresses.push_back(ext);
+}
+
+void LightServiceClass::responseCallback(SSDPClass *ssdp, IPAddress addr, uint16_t port) {
+  String key, value, ext;
+  bool def_hue = false;
+  bool def_hue_for_reals = false;
+  while (ssdp->readIncomingLine(&key, &value) > 0) {
+    if (key == "EXT") {
+      if (value.startsWith("LOCATION:")) {
+        value = value.substring(9);
+        if (value.startsWith(" ")) {
+          value = value.substring(1);
+        }
+        ext = value;
+      }
+    }
+    if (key == "LOCATION") {
+      ext = value;
+    }
+    if (key == "hue-bridgeid") {
+      def_hue = true;
+    }
+    if (key == "ST" && value == "upnp:rootdevice") {
+      def_hue_for_reals = true;
+    }
+  }
+  if (!def_hue || !def_hue_for_reals) {
+    return;
+  }
+  bridge_description_addresses.push_back(ext);
 }
 
 class LightGroup {
@@ -980,8 +1102,88 @@ void LightServiceClass::begin(ESP8266WebServer *svr) {
 
 }
 
+QList<String> known_bridges;
+void handleBridgeFound() {
+  if (!bridge_description_addresses.length()) {
+    return;
+  }
+
+  String location = bridge_description_addresses.front();
+  bridge_description_addresses.pop_front();
+  if (known_bridges.indexOf(location) != -1) {
+    return;
+  }
+  known_bridges.push_back(location);
+  HTTPClient http;
+  bool begin_ret = http.begin(location);
+  int responseCode = http.GET();
+  if (responseCode != 200) {
+    http.end();
+    return;
+  }
+  String payload = http.getString();
+  http.end();
+  int startloc = payload.indexOf("<modelName>");
+  int endloc = payload.indexOf("</modelName>");
+  startloc += strlen("<modelName>");
+  String modelName = payload.substring(startloc, endloc);
+  startloc = payload.indexOf("<URLBase>");
+  endloc = payload.indexOf("</URLBase>");
+  startloc += strlen("<URLBase>");
+  String urlbase = payload.substring(startloc, endloc);
+  startloc = payload.indexOf("<serialNumber>");
+  endloc = payload.indexOf("</serialNumber>");
+  startloc += strlen("<serialNumber>");
+  String remoteMac = payload.substring(startloc, endloc);
+  // allowable characters in fake id are alphanumerics, "-", ".", "_", "~"
+  String targetApi = urlbase + "api/api/lights";
+  begin_ret = http.begin(targetApi);
+  responseCode = http.GET();
+  if (responseCode != 200) {
+    Serial.print("Got bad response from lights api: ");
+    Serial.println(targetApi);
+    http.end();
+    return;
+  }
+  payload = http.getString();
+  aJsonObject* body = aJson.parse(( char*) payload.c_str());
+  http.end();
+  for (int i = 0; i < aJson.getArraySize(body); i++) {
+    aJsonObject *entry = aJson.getArrayItem(body, i);
+    entry->name;
+    switch (entry->type) {
+      case aJson_Object: {
+          foreign_lights.push_back(new ProxyHandler(urlbase, remoteMac, entry));
+          break;
+        }
+      default:
+        // wut?
+        break;
+    }
+  }
+}
+
+void LightServiceClass::enableBridgeMeshing() {
+  // enable bridge meshing
+  SSDP.setNotifyCallback(std::bind(&LightServiceClass::notifyCallback, this, _1, _2, _3));
+  SSDP.setResponseCallback(std::bind(&LightServiceClass::responseCallback, this, _1, _2, _3));
+  SSDP.beginSearch();
+}
+
+void LightServiceClass::disableBridgeMeshing() {
+  // disable bridge meshing
+  SSDP.setNotifyCallback(nullptr);
+  SSDP.setResponseCallback(nullptr);
+  // clear list
+  while (foreign_lights.length()) {
+    delete foreign_lights.front();
+    foreign_lights.pop_front();
+  }
+}
+
 void LightServiceClass::update() {
   HTTP->handleClient();
+  handleBridgeFound();
 }
 
 bool bufferlessResponses = false;
@@ -1299,6 +1501,7 @@ void addSingleLightJson(aJsonObject* root, int numberOfTheLight, LightHandler *l
   aJson.addItemToObject(root, "state", state = aJson.createObject());
   HueLightInfo info = lightHandler->getInfo(numberOfTheLight + 1);
   aJson.addBooleanToObject(state, "on", info.on);
+  aJson.addBooleanToObject(state, "local", info.local);
   aJson.addNumberToObject(state, "hue", info.hue); // hs mode: the hue (expressed in ~deg*182.04)
   aJson.addNumberToObject(state, "bri", info.brightness); // brightness between 0-254 (NB 0 is not off!)
   aJson.addNumberToObject(state, "sat", info.saturation); // hs mode: saturation between 0-254

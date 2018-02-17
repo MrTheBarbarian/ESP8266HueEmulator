@@ -11,6 +11,7 @@
 #include <NtpClientLib.h>
 #include <NeoPixelBus.h>
 #include <NeoPixelAnimator.h> // instead of NeoPixelAnimator branch
+#include <ESP8266HTTPClient.h>
 #include <QList.h>
 #include "LightService.h"
 
@@ -33,7 +34,7 @@ RgbColor black = RgbColor(0);
 
 #define pixelCount 30
 #define pixelPin 2 // Strip is attached to GPIO2 on ESP-01
-#define NUM_LIGHT_HANDLERS 6
+#define NUM_LIGHT_HANDLERS 3
 NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart800KbpsMethod> strip(NUM_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, pixelPin);
 NeoPixelAnimator animator(NUM_LIGHT_HANDLERS * NUM_PIXELS_PER_LIGHT, NEO_MILLISECONDS); // NeoPixel animation management object
 
@@ -181,6 +182,7 @@ void setup() {
 
   LightService.begin();
   //LightService.setBufferlessResponses(true);
+  //LightService.enableBridgeMeshing();
 
   // setup NUM_LIGHT_HANDLERS pixels as lights
   for (int i = 0; i < NUM_LIGHT_HANDLERS && i < pixelCount; i++) {

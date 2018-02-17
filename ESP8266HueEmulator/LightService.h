@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESP8266WiFi.h>
 
 enum HueColorType {
   TYPE_HUE_SAT, TYPE_CT, TYPE_XY
@@ -25,6 +26,7 @@ struct HueLightInfo {
   String alert = ALERT_NONE;
   String effect = EFFECT_NONE;
   unsigned int transitionTime = 800; // by default there is a transition time to the new state of 400 milliseconds
+  bool local = true;
 };
 
 class aJsonObject;
@@ -49,6 +51,7 @@ class LightHandler {
 
 #define COLOR_SATURATION 255.0f
 
+class SSDPClass;
 class ESP8266WebServer;
 class LightServiceClass {
     const char* _friendlyName;
@@ -65,7 +68,11 @@ class LightServiceClass {
       void begin();
       void begin(ESP8266WebServer *svr);
       void update();
+      void enableBridgeMeshing();
+      void disableBridgeMeshing();
     private:
+      void responseCallback(SSDPClass *ssdp, IPAddress addr, uint16_t port);
+      void notifyCallback(SSDPClass *ssdp, IPAddress addr, uint16_t port);
 };
 
 extern LightServiceClass LightService;
